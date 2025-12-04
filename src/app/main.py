@@ -1,34 +1,14 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-
-from fastapi import FastAPI
-
-from .admin.initialize import create_admin_interface
-from .api import router
+from .core.setup import create_tables
 from .core.config import settings
-from .core.setup import create_application, lifespan_factory
-
-admin = create_admin_interface()
-
-
-@asynccontextmanager
-async def lifespan_with_admin(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Custom lifespan that includes admin initialization."""
-    # Get the default lifespan
-    default_lifespan = lifespan_factory(settings)
-
-    # Run the default lifespan initialization and our admin initialization
-    async with default_lifespan(app):
-        # Initialize admin interface if it exists
-        if admin:
-            # Initialize admin database and setup
-            await admin.initialize()
-
-        yield
-
-
-app = create_application(router=router, settings=settings, lifespan=lifespan_with_admin)
-
-# Mount admin interface if enabled
-if admin:
-    app.mount(settings.CRUD_ADMIN_MOUNT_PATH, admin.app)
+from .crawler import create_application
+import asyncio
+create_tables()
+app = create_application()
+# video_ids = app.youtube_search("politics", 1)
+video_ids = app.bilibili_search("politics", 1)
+# uniqueIds = app.filter_duplicate(video_ids)
+# print(uniqueIds)
+# app.download_audio(["https://www.youtube.com/watch?v=Mn6GHMA8GIs"])
+# app.download_captions()
