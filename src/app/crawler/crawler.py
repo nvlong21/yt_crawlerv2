@@ -1,24 +1,22 @@
+import os
+import json
+import tqdm
 from datetime import datetime
 import time
-import logging
-
-import json
-import os
+from pathlib import Path
 import shutil
 from sqlalchemy import select
 from functools import partial
 from glob import glob
-import tqdm
 import yt_dlp as youtube_dl
 from pydub import AudioSegment
 from youtube_transcript_api import YouTubeTranscriptApi, Transcript
 from youtube_transcript_api._errors import NoTranscriptFound
 from ..core.config import settings
 from ..core.db.database import get_db
-from ..core.s3 import  upload_folder_to_s3
+from ..core.s3 import  get_s3_client
 from ..models.audio_craw import AudioCraw
 from ..core.config import settings
-import json
 
 
 def split_with_caption(audio_path, skip_idx=0, out_ext="wav") -> list:
@@ -48,7 +46,11 @@ def split_with_caption(audio_path, skip_idx=0, out_ext="wav") -> list:
 
 def read_audio(audio_path):
     return AudioSegment.from_file(audio_path)
-
+def ytdlp_post_process_hook(d):
+    if d["status"] != "finished":
+        return
+    with open("data.json", "w", encoding="utf-8") as f:
+        json.dump(d, f, ensure_ascii=False, indent=4)  
 class AudioCrawler:
     def __init__(self):
         # Delete directory if existing
@@ -128,6 +130,7 @@ class AudioCrawler:
 
     def download_and_upload_audio(self, entries) -> None:
         download_path = os.path.join(settings.DATA_DIR, "wavs/" + '%(id)s.%(ext)s')
+        shutil.rmtree(os.path.join(settings.DATA_DIR, "wavs/"))
         # youtube_dl options
         ydl_opts = {
             'format': 'bestaudio/best',
@@ -142,10 +145,11 @@ class AudioCrawler:
             'prefer_ffmpeg': True,
             'keepvideo': False,
             'outtmpl': download_path,  # 다운로드 경로 설정
-            'ignoreerrors': True
+            'ignoreerrors': True,
+            "progress_hooks": [ytdlp_post_process_hook],
         }
         urls:list[str] = []
-
+        s3Client = next(get_s3_client())
         for v in entries:
             video_data = {
                 "title": v.get("title"),
@@ -159,8 +163,43 @@ class AudioCrawler:
                 ydl.download(urls)
         except Exception as e:
             print('error', e)
-        upload_folder_to_s3(os.path.join(settings.DATA_DIR, "wavs/"), settings.S3_BUCKETNAME)
-        
+        # s3_prefix = ""
+        # local_folder = Path(os.path.join(settings.DATA_DIR, "wavs/"))
+        # for root, dirs, files in os.walk(local_folder):
+        #     for file in files:
+        #         local_path = Path(root) / file
+        #         relative_path = local_path.relative_to(local_folder)
+        #         print(relative_path)
+        #         s3_key = str(Path(s3_prefix) / relative_path).replace("\\", "/")
+
+        #         s3Client.upload_file(
+        #             Filename=str(local_path),
+        #             Bucket=settings.S3_BUCKETNAME,
+        #             Key=s3_key
+        #         )
+        #         print("Uploaded:", s3_key)
+        #         try:
+        #             db = next(get_db())
+    #                 audio =  AudioCraw(
+    # audio_id = _audioID,
+    # video_platform: Mapped[str] = mapped_column(String, nullable=True, default=None)
+    # platform_url: Mapped[str] = mapped_column(String, nullable=False, default= "")
+    # audio_url: Mapped[str] = mapped_column(String, nullable=True, default= "")
+    # duration: Mapped[int] = mapped_column(Integer, nullable=True, default= "")
+    # lang: Mapped[str] = mapped_column(String, nullable=True, default= "")
+    # subtitle: Mapped[str] = mapped_column(String, nullable=True, default= "")
+    # domain: Mapped[str] = mapped_column(String, nullable=True, default= "")
+    # caption_downloaded: Mapped[bool] = mapped_column(default=False)
+    # caption_url: Mapped[str] = mapped_column(String, nullable=True, default= "")    
+    # created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default_factory=lambda: datetime.now(UTC))
+    # updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)    
+    # deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    # is_deleted: Mapped[bool] = mapped_column(default=False, index=True) 
+                    # db.add(video)
+                #     db.commit()
+                # finally:
+                #     db.close()
+
     def download_captions(self, priority_manually_created=True) -> None:
         lang = self.lang
         text = []

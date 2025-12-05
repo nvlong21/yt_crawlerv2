@@ -18,6 +18,8 @@ class AudioCraw(Base):
     lang: Mapped[str] = mapped_column(String, nullable=True, default= "")
     subtitle: Mapped[str] = mapped_column(String, nullable=True, default= "")
     domain: Mapped[str] = mapped_column(String, nullable=True, default= "")
+    caption_downloaded: Mapped[bool] = mapped_column(default=False)
+    caption_url: Mapped[str] = mapped_column(String, nullable=True, default= "")    
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default_factory=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)    
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)

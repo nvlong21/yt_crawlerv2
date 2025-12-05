@@ -6,7 +6,6 @@ import asyncio
 create_tables()
 app = create_application()
 videoEntries = app.youtube_search("politics", 2)
-print(videoEntries)
 # video_ids = app.bilibili_search("politics", 1)
 uniqueIds = app.filter_duplicate(videoEntries)
 # print(uniqueIds)

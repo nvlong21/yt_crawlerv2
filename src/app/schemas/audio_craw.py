@@ -34,6 +34,8 @@ class AudioCrawUpdate(BaseModel):
     lang: str
     subtitle: str
     domain: str
+    caption_downloaded: bool
+    caption_url: str
 
 class AudioCrawUpdateInternal(AudioCrawUpdate):
     updated_at: datetime

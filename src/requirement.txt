@@ -8,5 +8,5 @@ uuid6
 asyncpg
 tqdm
 fastcrud
-psycopg2
-bôt3
+psycopg2-binary
+boto3
