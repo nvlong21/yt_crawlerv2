@@ -46,11 +46,6 @@ def split_with_caption(audio_path, skip_idx=0, out_ext="wav") -> list:
 
 def read_audio(audio_path):
     return AudioSegment.from_file(audio_path)
-def ytdlp_post_process_hook(d):
-    if d["status"] != "finished":
-        return
-    with open("data.json", "w", encoding="utf-8") as f:
-        json.dump(d, f, ensure_ascii=False, indent=4)  
 class AudioCrawler:
     def __init__(self):
         # Delete directory if existing
@@ -127,7 +122,27 @@ class AudioCrawler:
         # print(result)
     # Example
     # urls = youtube_search("japanese politics speech", 10)
+    def ytdlp_post_process_hook(self, d):
+        s3Client = next(get_s3_client())
+        s3_prefix = ""
+        local_folder = Path(os.path.join(settings.DATA_DIR, "wavs/"))
+        for root, dirs, files in os.walk(local_folder):
+            for file in files:
+                local_path = Path(root) / file
+                relative_path = local_path.relative_to(local_folder)
+                print(relative_path)
+                s3_key = str(Path(s3_prefix) / relative_path).replace("\\", "/")
 
+                s3Client.upload_file(
+                    Filename=str(local_path),
+                    Bucket=settings.S3_BUCKETNAME,
+                    Key=s3_key
+                )
+        
+        if d["status"] != "finished":
+            return
+        with open("data.json", "w", encoding="utf-8") as f:
+            json.dump(d, f, ensure_ascii=False, indent=4)  
     def download_and_upload_audio(self, entries) -> None:
         download_path = os.path.join(settings.DATA_DIR, "wavs/" + '%(id)s.%(ext)s')
         shutil.rmtree(os.path.join(settings.DATA_DIR, "wavs/"))
@@ -146,10 +161,10 @@ class AudioCrawler:
             'keepvideo': False,
             'outtmpl': download_path,  # 다운로드 경로 설정
             'ignoreerrors': True,
-            "progress_hooks": [ytdlp_post_process_hook],
+            "progress_hooks": [self.ytdlp_post_process_hook],
         }
         urls:list[str] = []
-        s3Client = next(get_s3_client())
+        
         for v in entries:
             video_data = {
                 "title": v.get("title"),
@@ -163,20 +178,6 @@ class AudioCrawler:
                 ydl.download(urls)
         except Exception as e:
             print('error', e)
-        # s3_prefix = ""
-        # local_folder = Path(os.path.join(settings.DATA_DIR, "wavs/"))
-        # for root, dirs, files in os.walk(local_folder):
-        #     for file in files:
-        #         local_path = Path(root) / file
-        #         relative_path = local_path.relative_to(local_folder)
-        #         print(relative_path)
-        #         s3_key = str(Path(s3_prefix) / relative_path).replace("\\", "/")
-
-        #         s3Client.upload_file(
-        #             Filename=str(local_path),
-        #             Bucket=settings.S3_BUCKETNAME,
-        #             Key=s3_key
-        #         )
         #         print("Uploaded:", s3_key)
         #         try:
         #             db = next(get_db())
