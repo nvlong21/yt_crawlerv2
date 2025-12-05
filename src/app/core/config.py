@@ -33,6 +33,7 @@ class SQLiteSettings(DatabaseSettings):
 
 class S3Settings(DatabaseSettings):
     S3_ENABLE: bool = Field(default=False, env="S3_ENABLED")
+    S3_ENDPOOINT: str = Field(default="", env="S3_ENDPOOINT")    
     S3_ACCESSKEY: str = Field(default="", env="S3_ACCESSKEY")
     S3_SECRETKEY: str = Field(default="", env="S3_SECRETKEY")
     S3_USESSL: bool = Field(default=True, env="S3_USESSL")
@@ -43,13 +44,17 @@ class S3Settings(DatabaseSettings):
     S3_IAM_ENDPOINT: str = Field(default="", env="S3_IAM_ENDPOINT")
     S3_REGION: str = Field(default="", env="S3_REGION")
     S3_USEVIRTUALHOST: bool = Field(default=False, env="S3_USEVIRTUALHOST")
-
-    # @computed_field  # type: ignore[prop-decorator]
-    # @property
-    # def MYSQL_URI(self) -> str:
-    #     credentials = f"{self.MYSQL_USER}:{self.MYSQL_PASSWORD}"
-    #     location = f"{self.MYSQL_SERVER}:{self.MYSQL_PORT}/{self.MYSQL_DB}"
-    #     return f"{credentials}@{location}"
+    AWS_ACCESS_KEY_ID: str = Field(default="", env="AWS_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY: str = Field(default="", env="AWS_SECRET_ACCESS_KEY")
+    AWS_DEFAULT_REGION: str = Field(default="", env="AWS_DEFAULT_REGION")
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def AWS_S3(self) -> bool:
+        return all([
+                bool(self.AWS_ACCESS_KEY_ID.strip()),
+                bool(self.AWS_SECRET_ACCESS_KEY.strip()),
+                bool(self.AWS_DEFAULT_REGION.strip()),
+            ])
 
 
 class PostgresSettings(DatabaseSettings):

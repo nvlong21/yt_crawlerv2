@@ -1,5 +1,3 @@
-from collections.abc import AsyncGenerator, Callable
-from contextlib import _AsyncGeneratorContextManager, asynccontextmanager
 from typing import Any
 from ..models import *  # noqa: F403
 
@@ -32,7 +30,3 @@ def create_tables() -> None:
 # async def close_redis_queue_pool() -> None:
 #     if queue.pool is not None:
 #         await queue.pool.aclose()  # type: ignore
-
-
-
-

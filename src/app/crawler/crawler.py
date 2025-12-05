@@ -1,3 +1,5 @@
+from datetime import datetime
+import time
 import logging
 
 import json
@@ -13,8 +15,9 @@ from youtube_transcript_api import YouTubeTranscriptApi, Transcript
 from youtube_transcript_api._errors import NoTranscriptFound
 from ..core.config import settings
 from ..core.db.database import get_db
+from ..core.s3 import  upload_folder_to_s3
 from ..models.audio_craw import AudioCraw
-
+from ..core.config import settings
 import json
 
 
@@ -43,7 +46,6 @@ def split_with_caption(audio_path, skip_idx=0, out_ext="wav") -> list:
 
     return audio_paths
 
-
 def read_audio(audio_path):
     return AudioSegment.from_file(audio_path)
 
@@ -55,22 +57,46 @@ class AudioCrawler:
         os.makedirs(settings.DATA_DIR, exist_ok=True)
         self.lang = "en"
 
-    def youtube_search(self, query, max_results=20):
+    def youtube_search(self, query: str, max_results: int = 20, upload_after: str = '', upload_before: str = ''):
         ydl_opts = {
+            "format": "ba/best",
             'quiet': True,
-            'skip_download': True,
-            'extract_flat': True,  # chỉ lấy metadata, không load streams
+            'skip_download': True, 
         }
-
+        _upload_after = datetime.strptime("19700101", "%Y%m%d")
+        _upload_before = datetime.now()
         query_str = f"ytsearch{max_results}:{query}"
+        now = int(time.time())
+        _videoEntries = []
+        if len(upload_after)==8:
+            _upload_after = datetime.strptime(upload_after, "%Y%m%d")
+        if len(upload_before)==8:
+            _upload_before = datetime.strptime(upload_before, "%Y%m%d")
 
         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
             result = ydl.extract_info(query_str, download=False)
-            with open("data.json", "w", encoding="utf-8") as f:
-                json.dump(result, f, ensure_ascii=False, indent=4)              
-        videos = result.get('entries', [])
-        videoIds = [v['id'] for v in videos if 'id' in v]
-        return videoIds
+        for v in result.get("entries", []):
+            # if v.get("available_at") and v["available_at"] > now:
+            #     print(f"{v["available_at"]} {now}")
+            #     continue
+
+            if v.get("live_status") in ("is_live", "is_upcoming"):
+                continue     
+            upload_date = v.get("upload_date")
+
+            if not upload_date and v.get("timestamp"):
+                d = datetime.utcfromtimestamp(v["timestamp"])
+            elif upload_date:
+                d = datetime.strptime(upload_date, "%Y%m%d")
+            else:
+                continue
+            if d < _upload_after or d > _upload_before:
+                continue
+            print(f"{d.date()} | {v['title']}")
+            v["platform"]= v["extractor"]
+            _videoEntries.append(v)
+            
+        return _videoEntries
 
     def filter_duplicate(self, _videos: list[dict]):
         db = next(get_db())
@@ -100,7 +126,7 @@ class AudioCrawler:
     # Example
     # urls = youtube_search("japanese politics speech", 10)
 
-    def download_audio(self, urls) -> None:
+    def download_and_upload_audio(self, entries) -> None:
         download_path = os.path.join(settings.DATA_DIR, "wavs/" + '%(id)s.%(ext)s')
         # youtube_dl options
         ydl_opts = {
@@ -118,13 +144,23 @@ class AudioCrawler:
             'outtmpl': download_path,  # 다운로드 경로 설정
             'ignoreerrors': True
         }
+        urls:list[str] = []
 
+        for v in entries:
+            video_data = {
+                "title": v.get("title"),
+                "url": v.get("webpage_url"),
+                "duration": v.get("duration"),
+                "id": v.get("id")
+            }
+            urls.append(v.get("webpage_url"))
         try:
             with youtube_dl.YoutubeDL(ydl_opts) as ydl:
                 ydl.download(urls)
         except Exception as e:
             print('error', e)
-
+        upload_folder_to_s3(os.path.join(settings.DATA_DIR, "wavs/"), settings.S3_BUCKETNAME)
+        
     def download_captions(self, priority_manually_created=True) -> None:
         lang = self.lang
         text = []
@@ -158,19 +194,6 @@ class AudioCrawler:
             except Exception as e:
                 print("error:", e)
             print(text)
-        # df = pd.DataFrame({"id": video_id, "text": text, "start": start, "duration": duration, "name": full_names})
-        # text_dir = os.path.join(self.output_dir, "text")
-        # makedirs(text_dir)
-
-        # df.to_csv(text_dir + '/subtitle.csv', encoding='utf-8')
-        # res = [i + '|' + j for i, j in zip(names, text)]
-        # df2 = pd.DataFrame({"name": res})
-        # df2.to_csv(os.path.join(self.output_dir, 'metadata.csv'), encoding='utf-8', header=False, index=False)
-        # file_data = OrderedDict()
-        # for i in range(df.shape[0]):
-        #     file_data[df['name'][i]] = df['text'][i]
-        # with open(os.path.join(self.output_dir, 'alignment.json'), 'w', encoding="utf-8") as make_file:
-        #     json.dump(file_data, make_file, ensure_ascii=False, indent="\n")
 
         # print(os.path.basename(self.output_dir) + ' channel was finished')
     def audio_split(self, parallel=False) -> None:

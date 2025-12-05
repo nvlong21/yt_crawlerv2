@@ -1,11 +1,12 @@
 pydub==0.23.1
-yt-dlp
-youtube-transcript-api
 pydantic==2.12.5
 pydantic_settings==2.12.0
 sqlalchemy==2.0.44
+yt-dlp
+youtube-transcript-api
 uuid6
 asyncpg
 tqdm
 fastcrud
 psycopg2
+bôt3
